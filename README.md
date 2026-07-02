@@ -84,12 +84,46 @@ cloud-native-gitops-platform/
 ### Prerequisites
 `aws-cli` · `terraform >= 1.6` · `kubectl` · `docker` · `go >= 1.23`
 
-### 1. Run the app locally
+---
+
+### 🟢 Run & test locally (free — no cloud needed)
+
+Everything below runs on your laptop and proves the code is correct without
+spending a cent on AWS.
+
+**1. Test & run the Go service**
 ```bash
-make run          # starts on http://localhost:8080
-curl localhost:8080/healthz
-curl localhost:8080/metrics
+cd app
+go test ./...            # run unit tests  → "ok ..."
+go run .                 # start the service → http://localhost:8080
 ```
+> **Port 8080 already in use?** Pick another port:
+> - macOS/Linux: `PORT=8090 go run .`
+> - Windows (cmd): `set PORT=8090 && go run .`
+> - Windows (PowerShell): `$env:PORT=8090; go run .`
+
+**2. See it running** — open in a browser or curl:
+```bash
+curl http://localhost:8090/            # service info + version
+curl http://localhost:8090/healthz     # {"status":"ok"}   (liveness)
+curl http://localhost:8090/readyz      # {"status":"ready"} (readiness)
+curl http://localhost:8090/metrics     # Prometheus metrics
+```
+> This is a **backend API** — a JSON response (not an error) means it works. The
+> visual Grafana/ArgoCD dashboards only appear once deployed to a cluster (below).
+
+**3. Validate the infrastructure (no cluster required)**
+```bash
+docker build -t gitops-demo-app app                # build the container image
+kubectl kustomize kubernetes/overlays/staging      # render the K8s manifests
+terraform -chdir=terraform init -backend=false     # download modules
+terraform -chdir=terraform validate                # validate the IaC
+terraform -chdir=terraform fmt -check              # check formatting
+```
+
+---
+
+### 🔴 Deploy for real on AWS  ⚠️ *creates billable resources*
 
 ### 2. Provision the cluster
 ```bash
