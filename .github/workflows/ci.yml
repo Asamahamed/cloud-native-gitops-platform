@@ -1,10 +1,15 @@
 name: CI/CD
 
+# NOTE: Automatic runs are paused (this workflow does NOT run on push).
+# It only runs when triggered manually from the GitHub "Actions" tab
+# ("Run workflow"). Re-enable auto-runs by uncommenting the push/PR
+# triggers below once GitHub Actions billing is set up.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/gitops-demo-app
