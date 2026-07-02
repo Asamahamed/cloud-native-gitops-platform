@@ -1,0 +1,20 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+override.tf
+override.tf.json
+.terraform.lock.hcl
+
+# Go
+app/app
+*.out
+coverage.out
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

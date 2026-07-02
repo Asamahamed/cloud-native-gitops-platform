@@ -1,0 +1,123 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/gitops-demo-app
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build & test the Go service
+  # ---------------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: app/go.sum
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests
+        run: go test -race -coverprofile=coverage.out ./...
+
+  # ---------------------------------------------------------------------------
+  # 2. Static analysis & IaC security scanning (DevSecOps gates)
+  # ---------------------------------------------------------------------------
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov (Terraform & Kubernetes misconfig scan)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          quiet: true
+          soft_fail: true
+          framework: terraform,kubernetes,dockerfile
+
+      - name: Trivy (filesystem vulnerability scan)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Build, scan & push the container image to GHCR
+  # ---------------------------------------------------------------------------
+  build:
+    needs: [test, security]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          load: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push image
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:staging
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # 4. GitOps promotion: bump the image tag in Git; ArgoCD does the deploy.
+  # ---------------------------------------------------------------------------
+  promote:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin new image tag in staging overlay
+        run: |
+          cd kubernetes/overlays/staging
+          sed -i "s|newTag:.*|newTag: ${GITHUB_SHA}|" kustomization.yaml
+      - name: Commit & push manifest update
+        run: |
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git commit -am "ci: deploy ${GITHUB_SHA} to staging" || echo "no changes"
+          git push

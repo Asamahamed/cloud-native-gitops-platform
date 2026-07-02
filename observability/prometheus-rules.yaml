@@ -1,0 +1,46 @@
+# SLO-based alerting rules. Loaded by the Prometheus Operator via ruleSelector.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-app-slo
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: demo-app.slo
+      rules:
+        # Alert if the 5xx error ratio exceeds 1% over 5 minutes.
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Demo app error rate above 1% SLO"
+            description: "5xx ratio is {{ $value | humanizePercentage }} over the last 5m."
+
+        # Alert if p95 latency exceeds 500ms.
+        - alert: HighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Demo app p95 latency above 500ms"
+            description: "p95 latency is {{ $value }}s."
+
+        # Alert if the deployment has no available replicas.
+        - alert: NoAvailableReplicas
+          expr: kube_deployment_status_replicas_available{deployment="demo-app"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Demo app has zero available replicas"
+            description: "The demo-app deployment has no ready pods."
