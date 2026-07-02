@@ -44,8 +44,8 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  cluster_endpoint_public_access  = true
-  enable_irsa                     = true
+  cluster_endpoint_public_access           = true
+  enable_irsa                              = true
   enable_cluster_creator_admin_permissions = true
 
   vpc_id     = module.vpc.vpc_id
@@ -66,9 +66,9 @@ module "eks" {
   }
 
   cluster_addons = {
-    coredns    = {}
-    kube-proxy = {}
-    vpc-cni    = {}
+    coredns            = {}
+    kube-proxy         = {}
+    vpc-cni            = {}
     aws-ebs-csi-driver = {}
   }
 }
